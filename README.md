@@ -32,7 +32,7 @@ Runs entirely in the browser: no server, no API keys, no LLM. Works offline once
 
 ## How to use
 
-1. Open the app and pick who moves first.
+1. Open the app, choose your colour (red or blue) and pick who moves first.
 2. On **your** turn the engine thinks for a moment and, with **Auto-play** on (the default),
    plays the best move for you. It is shown above the board and marked in green. Copy it into your game.
 3. On the **opponent's** turn, enter what they played: tap the square their pawn moved to,
@@ -43,7 +43,8 @@ Runs entirely in the browser: no server, no API keys, no LLM. Works offline once
 
 Turn Auto-play off in **Settings** to confirm each of your moves with **Play suggestion** instead.
 
-You are always red (bottom, racing up). The opponent is always blue (top, racing down).
+You always play from the bottom (racing up) and the opponent from the top (racing down),
+in whichever colours you chose.
 
 ## Getting started
 

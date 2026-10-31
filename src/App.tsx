@@ -17,8 +17,12 @@ import {
 } from './engine/rules';
 import { TEMPO, mateIn, type SearchInfo } from './engine/search';
 
+type Color = 'red' | 'blue';
+
 interface Game {
   first: Player;
+  /** Your pawn colour; the opponent gets the other one. */
+  color?: Color;
   moves: Move[];
   /** Indices of moves the app played for you automatically. */
   auto?: number[];
@@ -29,6 +33,7 @@ interface Game {
 const GAME_KEY = 'barricade-assistant/game';
 const THINK_KEY = 'barricade-assistant/think-ms';
 const AUTO_KEY = 'barricade-assistant/auto-play';
+const COLOR_KEY = 'barricade-assistant/color';
 const THINK_OPTIONS = [1000, 2000, 4000, 8000];
 const NAMES = ['You', 'Opponent'] as const;
 
@@ -108,7 +113,7 @@ export default function App() {
   }, [game]);
 
   if (!game || !state) {
-    return <Setup onStart={(first) => setGame({ first, moves: [] })} />;
+    return <Setup onStart={(first, color) => setGame({ first, color, moves: [] })} />;
   }
 
   const current = game;
@@ -145,7 +150,7 @@ export default function App() {
   }
 
   return (
-    <div className="app">
+    <div className={`app color-${current.color ?? 'red'}`}>
       <header className="topbar">
         <h1>
           <span className="logo" aria-hidden="true" />
@@ -296,9 +301,17 @@ export default function App() {
   );
 }
 
-function Setup({ onStart }: { onStart: (first: Player) => void }) {
+function Setup({ onStart }: { onStart: (first: Player, color: Color) => void }) {
+  const [color, setColor] = useState<Color>(() => load<Color>(COLOR_KEY, 'red'));
+  const other: Color = color === 'red' ? 'blue' : 'red';
+
+  function start(first: Player) {
+    save(COLOR_KEY, color);
+    onStart(first, color);
+  }
+
   return (
-    <div className="app">
+    <div className={`app color-${color}`}>
       <header className="topbar">
         <h1>
           <span className="logo" aria-hidden="true" />
@@ -313,16 +326,30 @@ function Setup({ onStart }: { onStart: (first: Player) => void }) {
             auto-play on, plays it for you: just copy it into your game. On the opponent's turn,
             enter what they played. Did something different? Tap <em>I played something else</em>.
           </p>
+          <h3>Your colour</h3>
+          <div className="setup-buttons" role="radiogroup" aria-label="Your colour">
+            {(['red', 'blue'] as const).map((c) => (
+              <button
+                key={c}
+                role="radio"
+                aria-checked={color === c}
+                className={`color-pick ${c} ${color === c ? 'on' : ''}`}
+                onClick={() => setColor(c)}
+              >
+                <span className="dot" /> {c === 'red' ? 'Red' : 'Blue'}
+              </button>
+            ))}
+          </div>
           <p className="muted">
-            You are <strong className="you-text">red</strong> (bottom). The opponent is{' '}
-            <strong className="opp-text">blue</strong> (top).
+            You are <strong className="you-text">{color}</strong> (bottom). The opponent is{' '}
+            <strong className="opp-text">{other}</strong> (top).
           </p>
           <h3>Who moves first?</h3>
           <div className="setup-buttons">
-            <button className="primary" onClick={() => onStart(0)}>
+            <button className="primary" onClick={() => start(0)}>
               I move first
             </button>
-            <button className="secondary" onClick={() => onStart(1)}>
+            <button className="secondary" onClick={() => start(1)}>
               Opponent moves first
             </button>
           </div>

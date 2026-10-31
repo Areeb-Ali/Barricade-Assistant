@@ -6,8 +6,14 @@
   --cell-border: #3b3b3b;
   --text: #f2f2f2;
   --muted: #9a9a9a;
-  --you: #ef4444;
-  --opp: #3b82f6;
+  --red: #ef4444;
+  --blue: #3b82f6;
+  --red-tint: #352a2a;
+  --blue-tint: #272d38;
+  --you: var(--red);
+  --opp: var(--blue);
+  --you-tint: var(--red-tint);
+  --opp-tint: var(--blue-tint);
   --good: #22c55e;
   --bad: #f87171;
   --radius: 16px;
@@ -259,11 +265,11 @@ code {
 }
 
 .board .cell.goal-you {
-  fill: #352a2a;
+  fill: var(--you-tint);
 }
 
 .board .cell.goal-opp {
-  fill: #272d38;
+  fill: var(--opp-tint);
 }
 
 .board .last-move {
@@ -634,4 +640,51 @@ code {
 
 .switch:checked::after {
   transform: translateX(20px);
+}
+
+/* Player colours */
+
+.app.color-blue {
+  --you: var(--blue);
+  --opp: var(--red);
+  --you-tint: var(--blue-tint);
+  --opp-tint: var(--red-tint);
+}
+
+.color-pick {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-weight: 600;
+  padding: 14px;
+}
+
+.color-pick .dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+}
+
+.color-pick.red .dot {
+  background: var(--red);
+}
+
+.color-pick.blue .dot {
+  background: var(--blue);
+}
+
+.color-pick.on.red {
+  border-color: var(--red);
+  background: #2d1b1b;
+}
+
+.color-pick.on.blue {
+  border-color: var(--blue);
+  background: #1b2333;
+}
+
+.you-text,
+.opp-text {
+  text-transform: capitalize;
 }
