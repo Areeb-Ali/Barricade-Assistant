@@ -41,6 +41,10 @@ Runs entirely in the browser: no server, no API keys, no LLM. Works offline once
    your actual move. Auto-play continues from the next turn.
 5. Made a mistake? Press **Undo**.
 
+On a laptop you can use the keyboard: <kbd>H</kbd> horizontal wall, <kbd>V</kbd> vertical wall,
+<kbd>Esc</kbd> cancel, <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo. In wall mode, clicking the middle of a
+highlighted square still moves the pawn.
+
 Turn Auto-play off in **Settings** to confirm each of your moves with **Play suggestion** instead.
 
 You always play from the bottom (racing up) and the opponent from the top (racing down),

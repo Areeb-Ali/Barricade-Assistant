@@ -688,3 +688,44 @@ code {
 .opp-text {
   text-transform: capitalize;
 }
+
+/* Laptop ergonomics */
+
+@media (min-width: 900px) {
+  /* Keep the board and its wall buttons on screen together on short laptop displays. */
+  .board-column .board {
+    max-width: max(380px, calc(100dvh - 300px));
+    margin: 0 auto;
+  }
+}
+
+.hint.bad {
+  color: var(--bad);
+}
+
+.shortcuts {
+  display: none;
+  margin: 0;
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .shortcuts {
+    display: block;
+  }
+}
+
+kbd {
+  font: inherit;
+  font-size: 0.75rem;
+  background: #2a2a2a;
+  border: 1px solid #3a3a3a;
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  padding: 0 5px;
+}
+
+.board .target.faint {
+  opacity: 0.35;
+}

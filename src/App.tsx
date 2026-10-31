@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Board, type InputMode } from './components/Board';
 import { useEngine } from './hooks/useEngine';
 import { moveName } from './engine/notation';
@@ -99,6 +99,22 @@ export default function App() {
     );
   }, [autoMove, autoAt]);
 
+  // Whenever the move count changes (including auto-play), drop back to pawn input
+  // so a leftover wall mode never swallows the next click.
+  const moveCount = game?.moves.length ?? -1;
+  useEffect(() => {
+    setMode('move');
+    setPending(null);
+  }, [moveCount]);
+
+  // Keyboard shortcuts for laptops: H / V toggle wall modes, Esc cancels, Ctrl+Z undoes.
+  const keyHandler = useRef<(e: KeyboardEvent) => void>(() => {});
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => keyHandler.current(e);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   const distances = useMemo(() => {
     if (!state) return [0, 0];
     return ([0, 1] as const).map((p) => distanceMap(state, p, new Int16Array(CELLS))[state.pawns[p]]);
@@ -145,9 +161,25 @@ export default function App() {
   }
 
   function onWallTap(m: Move, direct: boolean) {
-    if (direct || pending === m) play(m);
+    // An illegal spot is shown (in red, with a message) instead of silently ignored.
+    if (!wallLegal(state!, m)) setPending(m);
+    else if (direct || pending === m) play(m);
     else setPending(m);
   }
+
+  keyHandler.current = (e) => {
+    if (e.target instanceof HTMLInputElement || e.altKey || e.metaKey) return;
+    const key = e.key.toLowerCase();
+    if ((e.ctrlKey && key === 'z') || (!e.ctrlKey && key === 'backspace')) {
+      if (current.moves.length > 0) undo();
+    } else if (e.ctrlKey) {
+      return;
+    } else if (key === 'h' && canWall) chooseMode('h');
+    else if (key === 'v' && canWall) chooseMode('v');
+    else if (key === 'escape') chooseMode('move');
+    else return;
+    e.preventDefault();
+  };
 
   return (
     <div className={`app color-${current.color ?? 'red'}`}>
@@ -225,13 +257,17 @@ export default function App() {
             </button>
           </div>
 
+          <p className="shortcuts muted">
+            Keys: <kbd>H</kbd> horizontal · <kbd>V</kbd> vertical · <kbd>Esc</kbd> cancel · <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo
+          </p>
+
           {mode !== 'move' && (
-            <p className="hint">
+            <p className={`hint ${pending !== null && !wallLegal(state, pending) ? 'bad' : ''}`}>
               {pending === null
-                ? 'Tap the gap where the wall goes. Tap again to confirm.'
+                ? 'Click or tap the gap where the wall goes (tap twice on touch screens). Esc cancels.'
                 : wallLegal(state, pending)
                   ? `Wall ${moveName(pending)}: tap it again to place it.`
-                  : `Wall ${moveName(pending)} is not allowed there.`}
+                  : `A wall can't go at ${moveName(pending)} (it overlaps, crosses or blocks a path). Try another gap, or press ${mode === 'h' ? 'Horizontal' : 'Vertical'} again to cancel.`}
             </p>
           )}
         </section>

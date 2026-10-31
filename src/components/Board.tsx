@@ -81,6 +81,20 @@ export function Board(props: BoardProps) {
       if (row >= 0 && row < SIZE && col >= 0 && col < SIZE) props.onPawn(cellAt(row, col));
       return;
     }
+    // A click in the middle of a highlighted square is a pawn move even in wall mode;
+    // walls are placed by clicking near the gaps between squares.
+    const p = toBoard(e);
+    if (p) {
+      const col = Math.floor(p.x / PITCH);
+      const row = Math.floor(p.y / PITCH);
+      const fx = p.x - col * PITCH;
+      const fy = p.y - row * PITCH;
+      const central = fx > 25 && fx < 75 && fy > 25 && fy < 75;
+      if (central && row >= 0 && row < SIZE && col >= 0 && col < SIZE && targets.includes(cellAt(row, col))) {
+        props.onPawn(cellAt(row, col));
+        return;
+      }
+    }
     const m = slotAt(e);
     if (m !== null) props.onWallTap(m, e.pointerType === 'mouse');
   }
@@ -139,11 +153,10 @@ export function Board(props: BoardProps) {
       )}
 
       {interactive &&
-        mode === 'move' &&
         targets.map((cell) => (
           <rect
             key={`t${cell}`}
-            className="target"
+            className={`target${mode === 'move' ? '' : ' faint'}`}
             x={colOf(cell) * PITCH + GAP + 2}
             y={rowOf(cell) * PITCH + GAP + 2}
             width={CELL - 4}
