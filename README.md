@@ -6,6 +6,14 @@ engine searches the position and tells you the strongest move to play.
 
 Runs entirely in the browser: no server, no API keys, no LLM. Works offline once loaded.
 
+**Live demo:** https://areeb-ali.github.io/Manual-Hack-Barricade/
+
+<p align="center">
+  <img src="docs/screenshot-desktop.png" alt="Barricade Assistant suggesting a wall placement on desktop" width="68%" />
+  &nbsp;
+  <img src="docs/screenshot-mobile.png" alt="Barricade Assistant on a phone" width="24%" />
+</p>
+
 ## Features
 
 - **Game-tree search engine**: iterative-deepening negamax with alpha-beta pruning,
@@ -44,7 +52,10 @@ npm run build     # type-check and build to dist/
 
 ## Deploying
 
-The app is a static Vite build, so any static host works.
+The app is a static Vite build with relative asset paths, so any static host works.
+
+**GitHub Pages:** in *Settings → Pages*, set *Source* to **GitHub Actions**. The
+[`deploy.yml`](.github/workflows/deploy.yml) workflow tests, builds and publishes on every push to `main`.
 
 **Netlify:** choose *Add new site → Import an existing project* and pick this repository.
 Build settings are read from `netlify.toml` (build command `npm run build`, publish
