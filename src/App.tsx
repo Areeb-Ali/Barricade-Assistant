@@ -20,10 +20,15 @@ import { TEMPO, mateIn, type SearchInfo } from './engine/search';
 interface Game {
   first: Player;
   moves: Move[];
+  /** Indices of moves the app played for you automatically. */
+  auto?: number[];
+  /** Move index at which auto-play is paused so you can enter your own move. */
+  manualAt?: number;
 }
 
 const GAME_KEY = 'barricade-assistant/game';
 const THINK_KEY = 'barricade-assistant/think-ms';
+const AUTO_KEY = 'barricade-assistant/auto-play';
 const THINK_OPTIONS = [1000, 2000, 4000, 8000];
 const NAMES = ['You', 'Opponent'] as const;
 
@@ -62,16 +67,32 @@ function describeScore(info: SearchInfo): { text: string; tone: 'good' | 'bad' |
 export default function App() {
   const [game, setGame] = useState<Game | null>(() => load<Game | null>(GAME_KEY, null));
   const [thinkMs, setThinkMs] = useState(() => load(THINK_KEY, 2000));
+  const [autoPlay, setAutoPlay] = useState(() => load(AUTO_KEY, true));
   const [mode, setMode] = useState<InputMode>('move');
   const [pending, setPending] = useState<Move | null>(null);
 
   useEffect(() => save(GAME_KEY, game), [game]);
   useEffect(() => save(THINK_KEY, thinkMs), [thinkMs]);
+  useEffect(() => save(AUTO_KEY, autoPlay), [autoPlay]);
 
   const state = useMemo(() => (game ? replay(game.first, game.moves) : null), [game]);
   const won = state ? winner(state) : null;
   const yourTurn = state !== null && won === null && state.turn === 0;
   const engine = useEngine(yourTurn ? state : null, thinkMs);
+
+  // Auto-play: once the search for this exact position finishes, play its move.
+  const manualTurn = game !== null && game.manualAt === game.moves.length;
+  const autoMove =
+    autoPlay && yourTurn && !manualTurn && !engine.thinking && engine.position === state && engine.info
+      ? engine.info.move
+      : null;
+  const autoAt = game?.moves.length ?? 0;
+  useEffect(() => {
+    if (autoMove === null) return;
+    setGame((g) =>
+      g && g.moves.length === autoAt ? { ...g, moves: [...g.moves, autoMove], auto: [...(g.auto ?? []), autoAt] } : g,
+    );
+  }, [autoMove, autoAt]);
 
   const distances = useMemo(() => {
     if (!state) return [0, 0];
@@ -92,7 +113,9 @@ export default function App() {
 
   const current = game;
   const lastMove = current.moves.length ? current.moves[current.moves.length - 1] : null;
-  const suggestion = yourTurn && engine.info ? engine.info.move : null;
+  const lastWasAuto = lastMove !== null && (current.auto ?? []).includes(current.moves.length - 1);
+  const playedForYou = won === null && !yourTurn && lastWasAuto ? lastMove : null;
+  const suggestion = yourTurn && engine.info ? engine.info.move : playedForYou;
   const canWall = won === null && state.walls[state.turn] > 0;
 
   function play(m: Move) {
@@ -103,7 +126,11 @@ export default function App() {
   }
 
   function undo() {
-    setGame({ ...current, moves: current.moves.slice(0, -1) });
+    const moves = current.moves.slice(0, -1);
+    const auto = (current.auto ?? []).filter((i) => i < moves.length);
+    // Landing on your own turn pauses auto-play so you can enter that move yourself.
+    const yoursNext = (current.first + moves.length) % 2 === 0;
+    setGame({ ...current, moves, auto, manualAt: yoursNext ? moves.length : current.manualAt });
     setPending(null);
   }
 
@@ -149,8 +176,12 @@ export default function App() {
                 ? 'You win! 🎉'
                 : 'Opponent wins.'
               : yourTurn
-                ? 'Your move. Play the suggestion or enter your own move.'
-                : "Opponent's move. Enter what they played."}
+                ? autoPlay && !manualTurn
+                  ? 'Thinking… your move will be played automatically.'
+                  : 'Your move. Play the suggestion or enter the move you actually played.'
+                : playedForYou !== null
+                  ? `Played for you: ${moveName(playedForYou)}. Copy it, then enter the opponent's reply.`
+                  : "Opponent's move. Enter what they played."}
           </div>
 
           <Board
@@ -201,8 +232,23 @@ export default function App() {
         </section>
 
         <aside className="side-column">
+          {playedForYou !== null && (
+            <section className="panel played">
+              <h2>Played for you</h2>
+              <div className="best">
+                <span className="best-move">{moveName(playedForYou)}</span>
+                <span className="best-kind">{isWall(playedForYou) ? 'Place wall' : 'Move pawn'}</span>
+              </div>
+              <p className="muted">Make this move in your game, then enter the opponent's reply.</p>
+              <button className="secondary wide" onClick={undo}>
+                I played something else
+              </button>
+            </section>
+          )}
+
           <Analysis
             yourTurn={yourTurn}
+            hidden={playedForYou !== null}
             gameOver={won !== null}
             info={engine.info}
             thinking={engine.thinking}
@@ -210,7 +256,22 @@ export default function App() {
           />
 
           <section className="panel">
-            <h2>Think time</h2>
+            <h2>Settings</h2>
+            <label className="switch-row">
+              <span>
+                <strong>Auto-play my moves</strong>
+                <span className="muted small-block">
+                  Plays the suggestion for you, so you only enter the opponent's moves.
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                className="switch"
+                checked={autoPlay}
+                onChange={(e) => setAutoPlay(e.target.checked)}
+              />
+            </label>
+            <h3 className="sub">Think time</h3>
             <div className="segmented" role="radiogroup" aria-label="Think time">
               {THINK_OPTIONS.map((ms) => (
                 <button
@@ -248,8 +309,9 @@ function Setup({ onStart }: { onStart: (first: Player) => void }) {
         <section className="panel">
           <h2>New game</h2>
           <p>
-            Mirror your game here move by move. On your turn the engine searches the position and
-            suggests the strongest move. On the opponent's turn, enter what they played.
+            Mirror your game here. On your turn the engine finds the strongest move and, with
+            auto-play on, plays it for you: just copy it into your game. On the opponent's turn,
+            enter what they played. Did something different? Tap <em>I played something else</em>.
           </p>
           <p className="muted">
             You are <strong className="you-text">red</strong> (bottom). The opponent is{' '}
@@ -290,13 +352,14 @@ function PlayerCard(props: { player: Player; active: boolean; walls: number; dis
 
 function Analysis(props: {
   yourTurn: boolean;
+  hidden: boolean;
   gameOver: boolean;
   info: SearchInfo | null;
   thinking: boolean;
   onPlay: () => void;
 }) {
-  const { yourTurn, gameOver, info, thinking, onPlay } = props;
-  if (gameOver) return null;
+  const { yourTurn, hidden, gameOver, info, thinking, onPlay } = props;
+  if (gameOver || hidden) return null;
   if (!yourTurn) {
     return (
       <section className="panel analysis idle">

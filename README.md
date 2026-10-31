@@ -24,6 +24,8 @@ Runs entirely in the browser: no server, no API keys, no LLM. Works offline once
   once a player has no walls left.
 - **Full rules**: straight jumps, diagonal side-steps, wall overlap and crossing
   checks, and the "never fully block a player" rule.
+- **Auto-play**: the engine plays its suggestion for you, so you only enter the
+  opponent's moves. If you played something different, one tap lets you enter your actual move.
 - **Mobile-first UI**: tap a square to move, or pick Horizontal / Vertical and tap a gap
   to place a wall (tap twice on touch screens to confirm). Includes undo, the
   best line of play, configurable think time, and auto-save in local storage.
@@ -31,11 +33,15 @@ Runs entirely in the browser: no server, no API keys, no LLM. Works offline once
 ## How to use
 
 1. Open the app and pick who moves first.
-2. When it's **your** turn, the suggestion is highlighted in green on the board.
-   Press **Play suggestion** (or play something else) and make the same move in your game.
-3. When it's the **opponent's** turn, enter what they played: tap the square their
-   pawn moved to, or choose Horizontal / Vertical and tap where their wall went.
-4. Made a mistake? Press **Undo**.
+2. On **your** turn the engine thinks for a moment and, with **Auto-play** on (the default),
+   plays the best move for you. It is shown above the board and marked in green. Copy it into your game.
+3. On the **opponent's** turn, enter what they played: tap the square their pawn moved to,
+   or choose Horizontal / Vertical and tap where their wall went.
+4. Played something other than the suggestion? Tap **I played something else** and enter
+   your actual move. Auto-play continues from the next turn.
+5. Made a mistake? Press **Undo**.
+
+Turn Auto-play off in **Settings** to confirm each of your moves with **Play suggestion** instead.
 
 You are always red (bottom, racing up). The opponent is always blue (top, racing down).
 

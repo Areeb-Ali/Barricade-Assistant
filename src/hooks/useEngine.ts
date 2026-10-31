@@ -6,6 +6,8 @@ import type { SearchRequest, SearchResponse } from '../engine/worker';
 export interface EngineState {
   info: SearchInfo | null;
   thinking: boolean;
+  /** The position `info` belongs to, so callers can ignore stale results. */
+  position: State | null;
 }
 
 /**
@@ -13,22 +15,22 @@ export interface EngineState {
  * stay idle. A running search is cancelled by terminating its worker.
  */
 export function useEngine(position: State | null, timeMs: number): EngineState {
-  const [engine, setEngine] = useState<EngineState>({ info: null, thinking: false });
+  const [engine, setEngine] = useState<EngineState>({ info: null, thinking: false, position: null });
   const requestId = useRef(0);
 
   useEffect(() => {
     const id = ++requestId.current;
     if (!position) {
-      setEngine({ info: null, thinking: false });
+      setEngine({ info: null, thinking: false, position: null });
       return;
     }
 
     const worker = new Worker(new URL('../engine/worker.ts', import.meta.url), { type: 'module' });
-    setEngine({ info: null, thinking: true });
+    setEngine({ info: null, thinking: true, position });
 
     worker.onmessage = (e: MessageEvent<SearchResponse>) => {
       if (e.data.id !== requestId.current) return;
-      setEngine({ info: e.data.info, thinking: !e.data.done });
+      setEngine({ info: e.data.info, thinking: !e.data.done, position });
       if (e.data.done) worker.terminate();
     };
     worker.onerror = () => {
