@@ -44,6 +44,11 @@ export interface State {
   h: Uint8Array;
   /** Vertical walls by slot (1 = placed). */
   v: Uint8Array;
+  /**
+   * Per cell, a bitmask of blocked step directions (`1 << dir`), covering both
+   * the board edge and walls. Derived from `h`/`v`; kept in sync by `setWall`.
+   */
+  edges: Uint8Array;
   /** Player to move. */
   turn: Player;
 }
@@ -74,14 +79,39 @@ export function decodeWall(m: Move): { orientation: Orientation; row: number; co
   return { orientation: horizontal ? 'h' : 'v', row: (slot / SLOTS) | 0, col: slot % SLOTS };
 }
 
+const BORDER_EDGES = Uint8Array.from({ length: CELLS }, (_, cell) => {
+  const r = rowOf(cell);
+  const c = colOf(cell);
+  return (r === 0 ? 1 << UP : 0) | (r === SIZE - 1 ? 1 << DOWN : 0) | (c === 0 ? 1 << LEFT : 0) | (c === SIZE - 1 ? 1 << RIGHT : 0);
+});
+
 export function initialState(first: Player = 0): State {
   return {
     pawns: [START_CELL[0], START_CELL[1]],
     walls: [WALLS_PER_PLAYER, WALLS_PER_PLAYER],
     h: new Uint8Array(SLOTS * SLOTS),
     v: new Uint8Array(SLOTS * SLOTS),
+    edges: BORDER_EDGES.slice(),
     turn: first,
   };
+}
+
+/** Builds a full state (including the edge table) from its plain parts. */
+export function stateFrom(parts: {
+  pawns: readonly number[];
+  walls: readonly number[];
+  h: ArrayLike<number>;
+  v: ArrayLike<number>;
+  turn: Player;
+}): State {
+  const s = initialState(parts.turn);
+  s.pawns = [parts.pawns[0], parts.pawns[1]];
+  s.walls = [parts.walls[0], parts.walls[1]];
+  for (let i = 0; i < SLOTS * SLOTS; i++) {
+    if (parts.h[i]) setWall(s, H_BASE + i, 1);
+    if (parts.v[i]) setWall(s, V_BASE + i, 1);
+  }
+  return s;
 }
 
 export function cloneState(s: State): State {
@@ -90,35 +120,14 @@ export function cloneState(s: State): State {
     walls: [s.walls[0], s.walls[1]],
     h: s.h.slice(),
     v: s.v.slice(),
+    edges: s.edges.slice(),
     turn: s.turn,
   };
 }
 
-/** Is the boundary between rows `wr` and `wr + 1` blocked at column `col`? */
-function hBlocked(s: State, wr: number, col: number): boolean {
-  const base = wr * SLOTS;
-  return (col < SLOTS && s.h[base + col] === 1) || (col > 0 && s.h[base + col - 1] === 1);
-}
-
-/** Is the boundary between columns `wc` and `wc + 1` blocked at row `row`? */
-function vBlocked(s: State, row: number, wc: number): boolean {
-  return (row < SLOTS && s.v[row * SLOTS + wc] === 1) || (row > 0 && s.v[(row - 1) * SLOTS + wc] === 1);
-}
-
 /** Can a pawn step from `cell` one square in `dir`, ignoring other pawns? */
 export function canStep(s: State, cell: number, dir: number): boolean {
-  const r = rowOf(cell);
-  const c = colOf(cell);
-  switch (dir) {
-    case UP:
-      return r > 0 && !hBlocked(s, r - 1, c);
-    case DOWN:
-      return r < SIZE - 1 && !hBlocked(s, r, c);
-    case LEFT:
-      return c > 0 && !vBlocked(s, r, c - 1);
-    default:
-      return c < SIZE - 1 && !vBlocked(s, r, c);
-  }
+  return (s.edges[cell] & (1 << dir)) === 0;
 }
 
 export const neighbour = (cell: number, dir: number) => cell + STEP[dir];
@@ -218,9 +227,36 @@ export function wallFits(s: State, m: Move): boolean {
   return !((r > 0 && s.v[slot - SLOTS]) || (r < SLOTS - 1 && s.v[slot + SLOTS]));
 }
 
-function setWall(s: State, m: Move, value: 0 | 1) {
-  if (m < V_BASE) s.h[m - H_BASE] = value;
-  else s.v[m - V_BASE] = value;
+/**
+ * Places (`value` 1) or removes (0) a wall without any legality checks.
+ * Walls never share an edge, so removal can simply clear the edge bits.
+ */
+export function setWall(s: State, m: Move, value: 0 | 1): void {
+  const horizontal = m < V_BASE;
+  const slot = m - (horizontal ? H_BASE : V_BASE);
+  const r = (slot / SLOTS) | 0;
+  const c = slot % SLOTS;
+  const a = r * SIZE + c; // top-left cell of the 2x2 block the wall splits
+  const e = s.edges;
+  if (horizontal) {
+    s.h[slot] = value;
+    const down = 1 << DOWN;
+    const up = 1 << UP;
+    if (value) {
+      e[a] |= down; e[a + 1] |= down; e[a + SIZE] |= up; e[a + SIZE + 1] |= up;
+    } else {
+      e[a] &= ~down; e[a + 1] &= ~down; e[a + SIZE] &= ~up; e[a + SIZE + 1] &= ~up;
+    }
+  } else {
+    s.v[slot] = value;
+    const right = 1 << RIGHT;
+    const left = 1 << LEFT;
+    if (value) {
+      e[a] |= right; e[a + SIZE] |= right; e[a + 1] |= left; e[a + SIZE + 1] |= left;
+    } else {
+      e[a] &= ~right; e[a + SIZE] &= ~right; e[a + 1] &= ~left; e[a + SIZE + 1] &= ~left;
+    }
+  }
 }
 
 /** Full legality for a wall placed by the side to move. */

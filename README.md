@@ -24,6 +24,10 @@ Runs entirely in the browser: no server, no API keys, no LLM. Works offline once
   once a player has no walls left.
 - **Full rules**: straight jumps, diagonal side-steps, wall overlap and crossing
   checks, and the "never fully block a player" rule.
+- **Learns from losses**: every finished game is saved. Lost games are replayed in the
+  background with a much deeper search; wherever a clearly better move existed, it is stored
+  as a *lesson* (also for the mirror-image position) and played the next time that position
+  comes up.
 - **Auto-play**: the engine plays its suggestion for you, so you only enter the
   opponent's moves. If you played something different, one tap lets you enter your actual move.
 - **Mobile-first UI**: tap a square to move, or pick Horizontal / Vertical and tap a gap
@@ -50,6 +54,15 @@ Turn Auto-play off in **Settings** to confirm each of your moves with **Play sug
 You always play from the bottom (racing up) and the opponent from the top (racing down),
 in whichever colours you chose.
 
+## Game history and lessons
+
+- Finished games appear under **Your games** with the result.
+- Starting a new game while one is in progress counts as the **opponent leaving** (a win).
+- Each loss is studied automatically (about 6 seconds per move you made). Progress is shown
+  in the panel, and studying resumes if you close the page midway.
+- Everything is stored in your browser's local storage on that device. Use **Export backup**
+  to save it as a file and **Import backup** to load it on another device or browser.
+
 ## Getting started
 
 Requires Node.js 18 or later.
@@ -59,6 +72,7 @@ npm install
 npm run dev       # start the dev server
 npm test          # run the engine test suite
 npm run build     # type-check and build to dist/
+npm run match -- linear50 default 40 100   # engine-vs-engine tuning match
 ```
 
 ## Deploying

@@ -45,9 +45,24 @@ const INF = MATE + 1;
 const MAX_PLY = 64;
 const TT_LIMIT = 1_500_000;
 
-const STEP_WEIGHT = 100;
-const WALL_WEIGHT = 25;
-const RACE_BONUS = 3_000;
+export interface EvalWeights {
+  /** Score per step of shortest-path advantage. */
+  step: number;
+  /** Value of holding 0..10 walls (index = walls in hand). */
+  walls: readonly number[];
+  /** Bonus for a race that can no longer be stopped by walls. */
+  race: number;
+}
+
+/**
+ * Tuned with `npm run match`: valuing each wall in hand at half a step scored
+ * ~67% against both 0.25 steps per wall and a diminishing-returns curve.
+ */
+export const DEFAULT_WEIGHTS: EvalWeights = {
+  step: 100,
+  walls: Array.from({ length: 11 }, (_, n) => n * 50),
+  race: 3_000,
+};
 /** The side to move is effectively half a step ahead in the race. */
 export const TEMPO = 50;
 
@@ -68,6 +83,7 @@ export interface SearchOptions {
   timeMs: number;
   maxDepth?: number;
   onIteration?: (info: SearchInfo) => void;
+  weights?: EvalWeights;
 }
 
 /** Plies until mate for a mate score, otherwise null. */
@@ -78,12 +94,18 @@ export function mateIn(score: number): number | null {
 }
 
 /** Static evaluation from the side to move's perspective. */
-export function evaluate(dMe: number, dOpp: number, wallsMe: number, wallsOpp: number): number {
-  let score = (dOpp - dMe) * STEP_WEIGHT + (wallsMe - wallsOpp) * WALL_WEIGHT + TEMPO;
+export function evaluate(
+  dMe: number,
+  dOpp: number,
+  wallsMe: number,
+  wallsOpp: number,
+  w: EvalWeights = DEFAULT_WEIGHTS,
+): number {
+  let score = (dOpp - dMe) * w.step + w.walls[wallsMe] - w.walls[wallsOpp] + TEMPO;
   // Pure races: whoever cannot be blocked any more and is not behind wins.
   // We move first, so we win ties.
-  if (wallsOpp === 0 && dMe <= dOpp) score += RACE_BONUS;
-  else if (wallsMe === 0 && dOpp < dMe) score -= RACE_BONUS;
+  if (wallsOpp === 0 && dMe <= dOpp) score += w.race;
+  else if (wallsMe === 0 && dOpp < dMe) score -= w.race;
   return score;
 }
 
@@ -164,7 +186,11 @@ class Searcher {
   private readonly cellStack = new Int16Array(CELLS);
   private stamp = 0;
 
-  constructor(root: State, deadline: number) {
+  constructor(
+    root: State,
+    deadline: number,
+    private readonly weights: EvalWeights,
+  ) {
     this.s = cloneState(root);
     [this.h1, this.h2] = fullHash(this.s);
     this.deadline = deadline;
@@ -301,7 +327,7 @@ class Searcher {
     distanceMap(s, me, gMe);
     distanceMap(s, opp, gOpp);
     if (depth <= 0 || ply >= MAX_PLY - 1) {
-      return evaluate(gMe[s.pawns[me]], gOpp[s.pawns[opp]], s.walls[me], s.walls[opp]);
+      return evaluate(gMe[s.pawns[me]], gOpp[s.pawns[opp]], s.walls[me], s.walls[opp], this.weights);
     }
 
     const key = hashKey(this.h1, this.h2);
@@ -405,7 +431,7 @@ export function search(root: State, options: SearchOptions): SearchInfo {
   const g = distanceMap(root, root.turn, new Int16Array(CELLS));
   rootMoves.sort((a, b) => (isWall(a) ? 99 : g[a]) - (isWall(b) ? 99 : g[b]));
 
-  const searcher = new Searcher(root, start + options.timeMs);
+  const searcher = new Searcher(root, start + options.timeMs, options.weights ?? DEFAULT_WEIGHTS);
   const scores = new Map<Move, number>();
   const partial = { move: -1, score: -INF };
   let result: SearchInfo = {

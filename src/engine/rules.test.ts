@@ -7,6 +7,8 @@ import {
   makeMove,
   pawnMoves,
   replay,
+  setWall,
+  stateFrom,
   unmakeMove,
   wallMove,
   winner,
@@ -17,9 +19,7 @@ import { moveName } from './notation';
 const sorted = (xs: number[]) => [...xs].sort((a, b) => a - b);
 
 function place(s: State, o: 'h' | 'v', row: number, col: number) {
-  const m = wallMove(o, row, col);
-  if (o === 'h') s.h[m - wallMove('h', 0, 0)] = 1;
-  else s.v[m - wallMove('v', 0, 0)] = 1;
+  setWall(s, wallMove(o, row, col), 1);
 }
 
 describe('pawn movement', () => {
@@ -106,5 +106,25 @@ describe('game flow', () => {
     expect(moveName(cellAt(0, 0))).toBe('a9');
     expect(moveName(wallMove('h', 7, 3))).toBe('d1h');
     expect(moveName(wallMove('v', 0, 0))).toBe('a8v');
+  });
+});
+
+describe('edge table', () => {
+  it('stays consistent with the wall arrays through make and unmake', () => {
+    let seed = 7;
+    const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+    const s = initialState();
+    const history: [number, number][] = [];
+    for (let i = 0; i < 60 && winner(s) === null; i++) {
+      const moves = legalMoves(s);
+      const m = moves[(rnd() * moves.length) | 0];
+      history.push([m, makeMove(s, m)]);
+      expect(Array.from(s.edges)).toEqual(Array.from(stateFrom(s).edges));
+    }
+    while (history.length) {
+      const [m, undo] = history.pop()!;
+      unmakeMove(s, m, undo);
+    }
+    expect(Array.from(s.edges)).toEqual(Array.from(initialState().edges));
   });
 });

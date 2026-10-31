@@ -729,3 +729,99 @@ kbd {
 .board .target.faint {
   opacity: 0.35;
 }
+
+/* Game history & lessons */
+
+.lesson-badge {
+  display: inline-block;
+  margin: 2px 0 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #2a2340;
+  color: #c4b5fd;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.games .stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.games .stats div {
+  background: #242424;
+  border-radius: 10px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+}
+
+.games .stats strong {
+  font-size: 1.3rem;
+}
+
+.games .stats .muted {
+  font-size: 0.78rem;
+}
+
+.studying {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.88rem;
+  color: #c4b5fd;
+  margin-bottom: 10px;
+}
+
+.game-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.game-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.result {
+  font-weight: 700;
+  min-width: 96px;
+}
+
+.result.win,
+.result.resigned {
+  color: var(--good);
+}
+
+.result.loss {
+  color: var(--bad);
+}
+
+.lesson-count {
+  margin-left: auto;
+  color: #c4b5fd;
+  font-size: 0.8rem;
+}
+
+button.link {
+  padding: 6px 0;
+  border: none;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.backup {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}

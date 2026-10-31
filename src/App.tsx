@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Board, type InputMode } from './components/Board';
+import { GamesPanel } from './components/GamesPanel';
 import { useEngine } from './hooks/useEngine';
+import { useStudy } from './hooks/useStudy';
+import { lookupLesson, type Book, type Lesson } from './engine/book';
+import type { Finding } from './engine/study';
+import { newGameId, upsertRecord, type GameRecord, type Result } from './history';
 import { moveName } from './engine/notation';
 import {
   CELLS,
@@ -20,6 +25,8 @@ import { TEMPO, mateIn, type SearchInfo } from './engine/search';
 type Color = 'red' | 'blue';
 
 interface Game {
+  id?: string;
+  startedAt?: number;
   first: Player;
   /** Your pawn colour; the opponent gets the other one. */
   color?: Color;
@@ -28,12 +35,16 @@ interface Game {
   auto?: number[];
   /** Move index at which auto-play is paused so you can enter your own move. */
   manualAt?: number;
+  /** Indices of auto-played moves that came from a lesson. */
+  learned?: number[];
 }
 
 const GAME_KEY = 'barricade-assistant/game';
 const THINK_KEY = 'barricade-assistant/think-ms';
 const AUTO_KEY = 'barricade-assistant/auto-play';
 const COLOR_KEY = 'barricade-assistant/color';
+const HISTORY_KEY = 'barricade-assistant/history';
+const BOOK_KEY = 'barricade-assistant/book';
 const THINK_OPTIONS = [1000, 2000, 4000, 8000];
 const NAMES = ['You', 'Opponent'] as const;
 
@@ -70,7 +81,12 @@ function describeScore(info: SearchInfo): { text: string; tone: 'good' | 'bad' |
 }
 
 export default function App() {
-  const [game, setGame] = useState<Game | null>(() => load<Game | null>(GAME_KEY, null));
+  const [game, setGame] = useState<Game | null>(() => {
+    const saved = load<Game | null>(GAME_KEY, null);
+    return saved && !saved.id ? { ...saved, id: newGameId(), startedAt: Date.now() } : saved;
+  });
+  const [history, setHistory] = useState<GameRecord[]>(() => load(HISTORY_KEY, []));
+  const [book, setBook] = useState<Book>(() => load(BOOK_KEY, {}));
   const [thinkMs, setThinkMs] = useState(() => load(THINK_KEY, 2000));
   const [autoPlay, setAutoPlay] = useState(() => load(AUTO_KEY, true));
   const [mode, setMode] = useState<InputMode>('move');
@@ -79,25 +95,54 @@ export default function App() {
   useEffect(() => save(GAME_KEY, game), [game]);
   useEffect(() => save(THINK_KEY, thinkMs), [thinkMs]);
   useEffect(() => save(AUTO_KEY, autoPlay), [autoPlay]);
+  useEffect(() => save(HISTORY_KEY, history), [history]);
+  useEffect(() => save(BOOK_KEY, book), [book]);
 
   const state = useMemo(() => (game ? replay(game.first, game.moves) : null), [game]);
   const won = state ? winner(state) : null;
   const yourTurn = state !== null && won === null && state.turn === 0;
-  const engine = useEngine(yourTurn ? state : null, thinkMs);
+  // A lesson from a studied loss takes priority over a fresh search.
+  const lesson = useMemo(() => (yourTurn && state ? lookupLesson(book, state) : null), [yourTurn, state, book]);
+  const engine = useEngine(yourTurn && !lesson ? state : null, thinkMs);
 
   // Auto-play: once the search for this exact position finishes, play its move.
   const manualTurn = game !== null && game.manualAt === game.moves.length;
-  const autoMove =
-    autoPlay && yourTurn && !manualTurn && !engine.thinking && engine.position === state && engine.info
-      ? engine.info.move
-      : null;
+  const searched = !engine.thinking && engine.position === state && engine.info ? engine.info.move : null;
+  const autoMove = autoPlay && yourTurn && !manualTurn ? (lesson?.move ?? searched) : null;
+  const autoFromLesson = lesson !== null;
   const autoAt = game?.moves.length ?? 0;
   useEffect(() => {
     if (autoMove === null) return;
     setGame((g) =>
-      g && g.moves.length === autoAt ? { ...g, moves: [...g.moves, autoMove], auto: [...(g.auto ?? []), autoAt] } : g,
+      g && g.moves.length === autoAt
+        ? {
+            ...g,
+            moves: [...g.moves, autoMove],
+            auto: [...(g.auto ?? []), autoAt],
+            learned: autoFromLesson ? [...(g.learned ?? []), autoAt] : g.learned,
+          }
+        : g,
     );
-  }, [autoMove, autoAt]);
+  }, [autoMove, autoAt, autoFromLesson]);
+
+  // Finished games go into the history; a loss is then studied in the background.
+  useEffect(() => {
+    if (!game?.id || won === null) return;
+    setHistory((h) => upsertRecord(h, toRecord(game, won === 0 ? 'win' : 'loss')));
+  }, [game, won]);
+
+  const study = useStudy(history, (gameId: string, findings: Finding[]) => {
+    setBook((b) => {
+      const next = { ...b };
+      for (const f of findings) {
+        if (!next[f.key] || next[f.key].gain < f.gain) {
+          next[f.key] = { move: f.better, gain: f.gain, learnedAt: Date.now(), gameId };
+        }
+      }
+      return next;
+    });
+    setHistory((h) => h.map((r) => (r.id === gameId ? { ...r, studied: true, lessons: findings.length } : r)));
+  });
 
   // Whenever the move count changes (including auto-play), drop back to pawn input
   // so a leftover wall mode never swallows the next click.
@@ -128,15 +173,33 @@ export default function App() {
     return owners;
   }, [game]);
 
+  const gamesPanel = (
+    <GamesPanel
+      history={history}
+      book={book}
+      study={study}
+      onImport={(next) => {
+        setHistory(next.history);
+        setBook(next.book);
+      }}
+    />
+  );
+
   if (!game || !state) {
-    return <Setup onStart={(first, color) => setGame({ first, color, moves: [] })} />;
+    return (
+      <Setup
+        onStart={(first, color) => setGame({ id: newGameId(), startedAt: Date.now(), first, color, moves: [] })}
+        extra={gamesPanel}
+      />
+    );
   }
 
   const current = game;
   const lastMove = current.moves.length ? current.moves[current.moves.length - 1] : null;
   const lastWasAuto = lastMove !== null && (current.auto ?? []).includes(current.moves.length - 1);
   const playedForYou = won === null && !yourTurn && lastWasAuto ? lastMove : null;
-  const suggestion = yourTurn && engine.info ? engine.info.move : playedForYou;
+  const playedFromLesson = playedForYou !== null && (current.learned ?? []).includes(current.moves.length - 1);
+  const suggestion = yourTurn ? (lesson?.move ?? engine.info?.move ?? null) : playedForYou;
   const canWall = won === null && state.walls[state.turn] > 0;
 
   function play(m: Move) {
@@ -153,6 +216,14 @@ export default function App() {
     const yoursNext = (current.first + moves.length) % 2 === 0;
     setGame({ ...current, moves, auto, manualAt: yoursNext ? moves.length : current.manualAt });
     setPending(null);
+  }
+
+  /** Leaving an unfinished game counts as the opponent resigning. */
+  function newGame() {
+    if (current.id && won === null && current.moves.length >= 2) {
+      setHistory((h) => upsertRecord(h, toRecord(current, 'resigned')));
+    }
+    setGame(null);
   }
 
   function chooseMode(next: InputMode) {
@@ -188,7 +259,7 @@ export default function App() {
           <span className="logo" aria-hidden="true" />
           Barricade Assistant
         </h1>
-        <button className="ghost" onClick={() => setGame(null)}>
+        <button className="ghost" onClick={newGame}>
           New game
         </button>
       </header>
@@ -280,6 +351,7 @@ export default function App() {
                 <span className="best-move">{moveName(playedForYou)}</span>
                 <span className="best-kind">{isWall(playedForYou) ? 'Place wall' : 'Move pawn'}</span>
               </div>
+              {playedFromLesson && <p className="lesson-badge">Learned from a lost game you studied</p>}
               <p className="muted">Make this move in your game, then enter the opponent's reply.</p>
               <button className="secondary wide" onClick={undo}>
                 I played something else
@@ -292,6 +364,7 @@ export default function App() {
             hidden={playedForYou !== null}
             gameOver={won !== null}
             info={engine.info}
+            lesson={lesson}
             thinking={engine.thinking}
             onPlay={() => suggestion !== null && play(suggestion)}
           />
@@ -330,6 +403,7 @@ export default function App() {
           </section>
 
           <MoveList game={current} />
+          {gamesPanel}
           <Rules />
         </aside>
       </main>
@@ -337,7 +411,19 @@ export default function App() {
   );
 }
 
-function Setup({ onStart }: { onStart: (first: Player, color: Color) => void }) {
+function toRecord(game: Game, result: Result): GameRecord {
+  return {
+    id: game.id!,
+    startedAt: game.startedAt ?? Date.now(),
+    endedAt: Date.now(),
+    first: game.first,
+    color: game.color,
+    moves: game.moves,
+    result,
+  };
+}
+
+function Setup({ onStart, extra }: { onStart: (first: Player, color: Color) => void; extra: React.ReactNode }) {
   const [color, setColor] = useState<Color>(() => load<Color>(COLOR_KEY, 'red'));
   const other: Color = color === 'red' ? 'blue' : 'red';
 
@@ -390,6 +476,7 @@ function Setup({ onStart }: { onStart: (first: Player, color: Color) => void }) 
             </button>
           </div>
         </section>
+        {extra}
         <Rules />
       </main>
     </div>
@@ -418,11 +505,27 @@ function Analysis(props: {
   hidden: boolean;
   gameOver: boolean;
   info: SearchInfo | null;
+  lesson: Lesson | null;
   thinking: boolean;
   onPlay: () => void;
 }) {
-  const { yourTurn, hidden, gameOver, info, thinking, onPlay } = props;
+  const { yourTurn, hidden, gameOver, info, lesson, thinking, onPlay } = props;
   if (gameOver || hidden) return null;
+  if (yourTurn && lesson) {
+    return (
+      <section className="panel analysis">
+        <h2>Suggestion</h2>
+        <div className="best">
+          <span className="best-move">{moveName(lesson.move)}</span>
+          <span className="best-kind">{isWall(lesson.move) ? 'Place wall' : 'Move pawn'}</span>
+        </div>
+        <p className="lesson-badge">Learned from a lost game you studied</p>
+        <button className="primary wide" onClick={onPlay}>
+          Play suggestion
+        </button>
+      </section>
+    );
+  }
   if (!yourTurn) {
     return (
       <section className="panel analysis idle">
