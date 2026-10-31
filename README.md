@@ -6,7 +6,7 @@ engine searches the position and tells you the strongest move to play.
 
 Runs entirely in the browser: no server, no API keys, no LLM. Works offline once loaded.
 
-**Live demo:** https://areeb-ali.github.io/Manual-Hack-Barricade/
+**Live demo:** https://areeb-ali.github.io/Barricade-Assistant/
 
 <p align="center">
   <img src="docs/screenshot-desktop.png" alt="Barricade Assistant suggesting a wall placement on desktop" width="68%" />
