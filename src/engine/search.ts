@@ -32,8 +32,9 @@ import {
  * Iterative-deepening negamax with alpha-beta pruning, a transposition table
  * and history-ordered wall candidates.
  *
- * Evaluation is the classic shortest-path race: how many more steps the
- * opponent needs than we do, plus a small bonus for walls kept in hand.
+ * Evaluation combines shortest-path race distance, the number of independent
+ * shortest routes, and walls kept in hand. Repeated positions on a search line
+ * are treated as draws to prevent the engine from rewarding pawn shuffles.
  * Inside the tree, wall moves are limited to walls that cut an edge on one of
  * the opponent's shortest paths (the only walls that can slow them down
  * immediately); at the root every legal move is considered.
@@ -100,13 +101,56 @@ export function evaluate(
   wallsMe: number,
   wallsOpp: number,
   w: EvalWeights = DEFAULT_WEIGHTS,
+  pathsMe = 1,
+  pathsOpp = 1,
 ): number {
-  let score = (dOpp - dMe) * w.step + w.walls[wallsMe] - w.walls[wallsOpp] + TEMPO;
+  // Keep route flexibility in the evaluation: two positions can have the same
+  // shortest distance while one has a single fragile corridor and the other
+  // has several independent ways forward.
+  const routeValue = (n: number) => Math.min(8, Math.max(1, n)) * 12;
+  let score =
+    (dOpp - dMe) * w.step +
+    w.walls[wallsMe] -
+    w.walls[wallsOpp] +
+    routeValue(pathsMe) -
+    routeValue(pathsOpp) +
+    TEMPO;
   // Pure races: whoever cannot be blocked any more and is not behind wins.
   // We move first, so we win ties.
   if (wallsOpp === 0 && dMe <= dOpp) score += w.race;
   else if (wallsMe === 0 && dOpp < dMe) score -= w.race;
   return score;
+}
+
+
+
+/** Counts shortest routes to the goal, capped to keep the evaluation bounded. */
+function countShortestPaths(s: State, p: Player, g: Int16Array): number {
+  const ways = new Uint8Array(CELLS);
+  const goalStart = GOAL_ROW[p] * 9;
+  for (let c = 0; c < 9; c++) ways[goalStart + c] = 1;
+
+  const countFrom = (cell: number): number => {
+    if (ways[cell]) return ways[cell];
+    const distance = g[cell];
+    if (distance < 0) return 0;
+    let total = 0;
+    for (let dir = 0; dir < 4; dir++) {
+      if (!canStep(s, cell, dir)) continue;
+      const next = neighbour(cell, dir);
+      if (g[next] === distance - 1) {
+        total += countFrom(next);
+        if (total >= 8) {
+          total = 8;
+          break;
+        }
+      }
+    }
+    ways[cell] = total;
+    return total;
+  };
+
+  return countFrom(s.pawns[p]);
 }
 
 // ---------------------------------------------------------------- hashing
@@ -184,6 +228,8 @@ class Searcher {
   private readonly wallMark = new Int32Array(MOVE_SPACE);
   private readonly cellMark = new Int32Array(CELLS);
   private readonly cellStack = new Int16Array(CELLS);
+  /** Hashes on the active search line; repeated positions are treated as draws. */
+  private readonly pathKeys = new Float64Array(MAX_PLY);
   private stamp = 0;
 
   constructor(
@@ -193,6 +239,7 @@ class Searcher {
   ) {
     this.s = cloneState(root);
     [this.h1, this.h2] = fullHash(this.s);
+    this.pathKeys[0] = hashKey(this.h1, this.h2);
     this.deadline = deadline;
     for (let i = 0; i < MAX_PLY; i++) {
       this.dist.push([new Int16Array(CELLS), new Int16Array(CELLS)]);
@@ -323,14 +370,27 @@ class Searcher {
     const opp = (me ^ 1) as Player;
     if (rowOf(s.pawns[opp]) === GOAL_ROW[opp]) return -MATE + ply;
 
+    const key = hashKey(this.h1, this.h2);
+    // Barricade permits reversible pawn shuffles. Treat a repeated position on
+    // the current line as a draw instead of allowing the search to reward loops.
+    for (let i = 0; i < ply; i++) if (this.pathKeys[i] === key) return 0;
+    this.pathKeys[ply] = key;
+
     const [gMe, gOpp] = this.dist[ply];
     distanceMap(s, me, gMe);
     distanceMap(s, opp, gOpp);
     if (depth <= 0 || ply >= MAX_PLY - 1) {
-      return evaluate(gMe[s.pawns[me]], gOpp[s.pawns[opp]], s.walls[me], s.walls[opp], this.weights);
+      return evaluate(
+        gMe[s.pawns[me]],
+        gOpp[s.pawns[opp]],
+        s.walls[me],
+        s.walls[opp],
+        this.weights,
+        countShortestPaths(s, me, gMe),
+        countShortestPaths(s, opp, gOpp),
+      );
     }
 
-    const key = hashKey(this.h1, this.h2);
     const entry = this.tt.get(key);
     let ttMove = -1;
     if (entry) {
@@ -379,6 +439,9 @@ class Searcher {
     partial.move = -1;
     partial.score = -INF;
     for (const m of rootMoves) {
+      // Check at the root too: positions with many legal walls can otherwise
+      // spend a long time finishing an iteration after the time budget expires.
+      if (performance.now() > this.deadline) throw ABORT;
       const undo = this.make(m);
       const score = -this.negamax(depth - 1, -INF, -alpha, 1);
       this.unmake(m, undo);
@@ -448,16 +511,8 @@ export function search(root: State, options: SearchOptions): SearchInfo {
       searcher.searchRoot(rootMoves, depth, scores, partial);
     } catch (e) {
       if (e !== ABORT) throw e;
-      // The first root move searched is the previous best, so any move found
-      // in an interrupted iteration is at least as good as what we had.
-      if (partial.move >= 0) {
-        result = {
-          ...result,
-          move: partial.move,
-          score: partial.score,
-          pv: searcher.principalVariation(root, partial.move, depth),
-        };
-      }
+      // Never publish a move from an incomplete root iteration. Keep the best
+      // move from the last fully completed depth (or the legal fallback).
       break;
     }
     rootMoves.sort((a, b) => (scores.get(b) ?? -INF) - (scores.get(a) ?? -INF));

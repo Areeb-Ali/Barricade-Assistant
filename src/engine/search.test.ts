@@ -1,8 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { CELLS, cellAt, distanceMap, initialState, isLegal, isWall, makeMove, pawnMoves, winner } from './rules';
-import { mateIn, search } from './search';
+import { DEFAULT_WEIGHTS, evaluate, mateIn, search } from './search';
 
 describe('search', () => {
+  it('prefers a position with more independent shortest routes', () => {
+    const fragile = evaluate(5, 5, 5, 5, DEFAULT_WEIGHTS, 1, 1);
+    const flexible = evaluate(5, 5, 5, 5, DEFAULT_WEIGHTS, 4, 1);
+    expect(flexible).toBeGreaterThan(fragile);
+  });
+
+  it('keeps a legal fallback if the time budget expires before depth one', () => {
+    const s = initialState(0);
+    const r = search(s, { timeMs: 0 });
+    expect(isLegal(s, r.move)).toBe(true);
+    expect(r.depth).toBe(0);
+  });
+
   it('takes an immediate win', () => {
     const s = initialState(0);
     s.pawns = [cellAt(1, 0), cellAt(7, 8)];
