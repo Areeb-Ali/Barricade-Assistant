@@ -3,6 +3,11 @@ import { CELLS, cellAt, distanceMap, initialState, isLegal, isWall, makeMove, pa
 import { DEFAULT_WEIGHTS, evaluate, mateIn, search } from './search';
 
 describe('search', () => {
+  it('protects the last wall more than an early wall', () => {
+    const w = DEFAULT_WEIGHTS.walls;
+    expect(w[1] - w[0]).toBeGreaterThan(w[10] - w[9]);
+  });
+
   it('prefers a position with more independent shortest routes', () => {
     const fragile = evaluate(5, 5, 5, 5, DEFAULT_WEIGHTS, 1, 1);
     const flexible = evaluate(5, 5, 5, 5, DEFAULT_WEIGHTS, 4, 1);

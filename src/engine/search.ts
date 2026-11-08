@@ -56,12 +56,14 @@ export interface EvalWeights {
 }
 
 /**
- * Tuned with `npm run match`: valuing each wall in hand at half a step scored
- * ~67% against both 0.25 steps per wall and a diminishing-returns curve.
+ * Wall stock is deliberately valued with diminishing returns as stock grows:
+ * spending from 10 to 9 is cheap, while spending the final wall is expensive.
+ * This makes the engine preserve a late-game defensive reserve without
+ * refusing to use walls when it has a healthy supply.
  */
 export const DEFAULT_WEIGHTS: EvalWeights = {
   step: 100,
-  walls: Array.from({ length: 11 }, (_, n) => n * 50),
+  walls: [0, 80, 150, 210, 260, 300, 330, 350, 365, 375, 380],
   race: 3_000,
 };
 /** The side to move is effectively half a step ahead in the race. */

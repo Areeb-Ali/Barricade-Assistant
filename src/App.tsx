@@ -45,7 +45,7 @@ const AUTO_KEY = 'barricade-assistant/auto-play';
 const COLOR_KEY = 'barricade-assistant/color';
 const HISTORY_KEY = 'barricade-assistant/history';
 const BOOK_KEY = 'barricade-assistant/book';
-const THINK_OPTIONS = [1000, 2000, 4000, 8000];
+const THINK_OPTIONS = [2000, 4000, 8000, 15000];
 const NAMES = ['You', 'Opponent'] as const;
 
 function load<T>(key: string, fallback: T): T {
@@ -87,7 +87,10 @@ export default function App() {
   });
   const [history, setHistory] = useState<GameRecord[]>(() => load(HISTORY_KEY, []));
   const [book, setBook] = useState<Book>(() => load(BOOK_KEY, {}));
-  const [thinkMs, setThinkMs] = useState(() => load(THINK_KEY, 2000));
+  const [thinkMs, setThinkMs] = useState(() => {
+    const saved = load<number>(THINK_KEY, 8000);
+    return saved === 2000 ? 8000 : saved;
+  });
   const [autoPlay, setAutoPlay] = useState(() => load(AUTO_KEY, true));
   const [mode, setMode] = useState<InputMode>('move');
   const [pending, setPending] = useState<Move | null>(null);
@@ -399,7 +402,7 @@ export default function App() {
                 </button>
               ))}
             </div>
-            <p className="muted small">Longer is stronger. 2s is plenty against most opponents.</p>
+            <p className="muted small">Longer is stronger. Use 8–15s for difficult wall-trap positions.</p>
           </section>
 
           <MoveList game={current} />
