@@ -13,11 +13,19 @@ const concave = (values: number[]) => [0, ...values];
 
 export const CONFIGS: Record<string, EvalWeights> = {
   default: DEFAULT_WEIGHTS,
+  old: { ...DEFAULT_WEIGHTS, threat: 0, walls: [0, 80, 150, 210, 260, 300, 330, 350, 365, 375, 380] },
+  nothreat: { ...DEFAULT_WEIGHTS, threat: 0 },
+  t6: { ...DEFAULT_WEIGHTS, threat: 0.6 },
+  t9: { ...DEFAULT_WEIGHTS, threat: 0.9 },
   linear25: { ...DEFAULT_WEIGHTS, walls: Array.from({ length: 11 }, (_, n) => n * 25) },
   linear10: { ...DEFAULT_WEIGHTS, walls: Array.from({ length: 11 }, (_, n) => n * 10) },
   linear50: { ...DEFAULT_WEIGHTS, walls: Array.from({ length: 11 }, (_, n) => n * 50) },
   linear65: { ...DEFAULT_WEIGHTS, walls: Array.from({ length: 11 }, (_, n) => n * 65) },
   linear80: { ...DEFAULT_WEIGHTS, walls: Array.from({ length: 11 }, (_, n) => n * 80) },
+  lin150: { ...DEFAULT_WEIGHTS, walls: Array.from({ length: 11 }, (_, n) => n * 150) },
+  lin200: { ...DEFAULT_WEIGHTS, walls: Array.from({ length: 11 }, (_, n) => n * 200) },
+  lin260: { ...DEFAULT_WEIGHTS, walls: Array.from({ length: 11 }, (_, n) => n * 260) },
+  lin320: { ...DEFAULT_WEIGHTS, walls: Array.from({ length: 11 }, (_, n) => n * 320) },
   concave: { ...DEFAULT_WEIGHTS, walls: concave([70, 130, 180, 220, 255, 285, 310, 330, 345, 355]) },
   concave2: { ...DEFAULT_WEIGHTS, walls: concave([110, 200, 270, 325, 370, 405, 435, 460, 480, 495]) },
 };

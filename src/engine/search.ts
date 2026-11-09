@@ -18,6 +18,7 @@ import {
   legalMoves,
   makeMove,
   neighbour,
+  setWall,
   pawnMoves,
   rowOf,
   unmakeMove,
@@ -53,6 +54,12 @@ export interface EvalWeights {
   walls: readonly number[];
   /** Bonus for a race that can no longer be stopped by walls. */
   race: number;
+  /**
+   * Fraction of the opponent's best single-wall damage (in steps) that is
+   * charged against us at a leaf. This is what makes the engine see traps and
+   * double-traps coming instead of trusting a raw shortest-path lead.
+   */
+  threat: number;
 }
 
 /**
@@ -63,8 +70,9 @@ export interface EvalWeights {
  */
 export const DEFAULT_WEIGHTS: EvalWeights = {
   step: 100,
-  walls: [0, 80, 150, 210, 260, 300, 330, 350, 365, 375, 380],
+  walls: [0, 120, 240, 350, 450, 540, 620, 690, 750, 800, 840],
   race: 3_000,
+  threat: 0.3,
 };
 /** The side to move is effectively half a step ahead in the race. */
 export const TEMPO = 50;
@@ -105,6 +113,8 @@ export function evaluate(
   w: EvalWeights = DEFAULT_WEIGHTS,
   pathsMe = 1,
   pathsOpp = 1,
+  dmgOnMe = 0,
+  dmgOnOpp = 0,
 ): number {
   // Keep route flexibility in the evaluation: two positions can have the same
   // shortest distance while one has a single fragile corridor and the other
@@ -116,7 +126,11 @@ export function evaluate(
     w.walls[wallsOpp] +
     routeValue(pathsMe) -
     routeValue(pathsOpp) +
-    TEMPO;
+    TEMPO -
+    // Opponent walls that could hurt us are charged; our own threats are credited
+    // a bit less because the side to move gets to use them first.
+    Math.round(dmgOnMe * w.threat * w.step) +
+    Math.round(dmgOnOpp * w.threat * w.step * 0.5);
   // Pure races: whoever cannot be blocked any more and is not behind wins.
   // We move first, so we win ties.
   if (wallsOpp === 0 && dMe <= dOpp) score += w.race;
@@ -233,6 +247,7 @@ class Searcher {
   /** Hashes on the active search line; repeated positions are treated as draws. */
   private readonly pathKeys = new Float64Array(MAX_PLY);
   private stamp = 0;
+  private readonly scratch = new Int16Array(CELLS);
 
   constructor(
     root: State,
@@ -327,6 +342,30 @@ class Searcher {
     return count;
   }
 
+  /**
+   * Largest increase in `victim`'s shortest distance that one legal wall from
+   * `attacker` can cause (capped). 0 when the attacker has no walls.
+   */
+  private maxWallDamage(ply: number, victim: Player, attacker: Player, gV: Int16Array, base: number): number {
+    const s = this.s;
+    if (s.walls[attacker] === 0) return 0;
+    this.stamp++;
+    const count = this.addPathWalls(ply, 0, victim, gV, -1);
+    const moves = this.moves[ply];
+    let best = 0;
+    for (let i = 0; i < count; i++) {
+      const m = moves[i];
+      setWall(s, m, 1);
+      if (hasPath(s, 0) && hasPath(s, 1)) {
+        distanceMap(s, victim, this.scratch);
+        const d = this.scratch[s.pawns[victim]] - base;
+        if (d > best) best = d;
+      }
+      setWall(s, m, 0);
+    }
+    return Math.min(best, 8);
+  }
+
   private generate(ply: number, gMe: Int16Array, gOpp: Int16Array, ttMove: Move): number {
     const s = this.s;
     const me = s.turn;
@@ -382,14 +421,19 @@ class Searcher {
     distanceMap(s, me, gMe);
     distanceMap(s, opp, gOpp);
     if (depth <= 0 || ply >= MAX_PLY - 1) {
+      const dMe = gMe[s.pawns[me]];
+      const dOpp = gOpp[s.pawns[opp]];
+      const useThreat = this.weights.threat > 0 && dMe > 0 && dOpp > 0;
       return evaluate(
-        gMe[s.pawns[me]],
-        gOpp[s.pawns[opp]],
+        dMe,
+        dOpp,
         s.walls[me],
         s.walls[opp],
         this.weights,
         countShortestPaths(s, me, gMe),
         countShortestPaths(s, opp, gOpp),
+        useThreat ? this.maxWallDamage(ply, me, opp, gMe, dMe) : 0,
+        useThreat ? this.maxWallDamage(ply, opp, me, gOpp, dOpp) : 0,
       );
     }
 
