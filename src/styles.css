@@ -825,3 +825,22 @@ button.link {
   gap: 8px;
   margin-top: 12px;
 }
+
+.winbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--panel, #1b1f2a);
+  border: 1px solid rgba(128, 128, 128, 0.35);
+}
+.winbar-text { display: flex; justify-content: space-between; align-items: baseline; font-size: 0.85rem; }
+.winbar-text strong { font-size: 1.4rem; }
+.winbar-track { height: 8px; border-radius: 4px; background: rgba(128, 128, 128, 0.3); overflow: hidden; margin-top: 4px; }
+.winbar-fill { height: 100%; border-radius: 4px; background: #d9a400; transition: width 0.4s ease; }
+.winbar.good .winbar-fill { background: #2e9e5b; }
+.winbar.bad .winbar-fill { background: #d64545; }
+.winbar.good strong { color: #2e9e5b; }
+.winbar.bad strong { color: #d64545; }

@@ -13,7 +13,8 @@ const concave = (values: number[]) => [0, ...values];
 
 export const CONFIGS: Record<string, EvalWeights> = {
   default: DEFAULT_WEIGHTS,
-  old: { ...DEFAULT_WEIGHTS, threat: 0, walls: [0, 80, 150, 210, 260, 300, 330, 350, 365, 375, 380] },
+  old: { ...DEFAULT_WEIGHTS, threat: 0, oppFocus: 1, walls: [0, 80, 150, 210, 260, 300, 330, 350, 365, 375, 380] },
+  focus1: { ...DEFAULT_WEIGHTS, oppFocus: 1 },
   nothreat: { ...DEFAULT_WEIGHTS, threat: 0 },
   t6: { ...DEFAULT_WEIGHTS, threat: 0.6 },
   t9: { ...DEFAULT_WEIGHTS, threat: 0.9 },

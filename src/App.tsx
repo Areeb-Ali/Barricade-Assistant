@@ -20,7 +20,7 @@ import {
   type Move,
   type Player,
 } from './engine/rules';
-import { TEMPO, mateIn, type SearchInfo } from './engine/search';
+import { TEMPO, mateIn, winChance, type SearchInfo } from './engine/search';
 
 type Color = 'red' | 'blue';
 
@@ -107,6 +107,16 @@ export default function App() {
   // A lesson from a studied loss takes priority over a fresh search.
   const lesson = useMemo(() => (yourTurn && state ? lookupLesson(book, state) : null), [yourTurn, state, book]);
   const engine = useEngine(yourTurn && !lesson ? state : null, thinkMs);
+
+  // Win chance shown at the top. It comes from the latest search for you and is
+  // kept while the opponent is thinking; it resets when a new game starts.
+  const [chance, setChance] = useState<number | null>(null);
+  const gameId = game?.id;
+  useEffect(() => setChance(null), [gameId]);
+  useEffect(() => {
+    if (won !== null) setChance(won === 0 ? 100 : 0);
+    else if (engine.info) setChance(winChance(engine.info.score));
+  }, [engine.info, won]);
 
   // Auto-play: once the search for this exact position finishes, play its move.
   const manualTurn = game !== null && game.manualAt === game.moves.length;
@@ -266,6 +276,18 @@ export default function App() {
           New game
         </button>
       </header>
+
+      {chance !== null && (
+        <div className={`winbar ${chance >= 55 ? 'good' : chance <= 45 ? 'bad' : 'even'}`} role="status">
+          <div className="winbar-text">
+            <span>Your win chance</span>
+            <strong>{chance}%</strong>
+          </div>
+          <div className="winbar-track">
+            <div className="winbar-fill" style={{ width: `${chance}%` }} />
+          </div>
+        </div>
+      )}
 
       <main className="layout">
         <section className="board-column">

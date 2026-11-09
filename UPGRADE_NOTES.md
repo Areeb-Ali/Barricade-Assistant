@@ -21,3 +21,9 @@ Heuristic engine, not a solver. Tests (vitest) and the production build could no
 here (no npm install); the engine was type-checked and exercised with self-play matches.
 Run `npm install && npm test && npm run build` once after unzipping.
 Tune with: `npm run match -- default old 40 300`.
+
+## Update 2
+- **Fixed a real bug:** repeated positions were scored as a free draw (0), so a losing engine shuffled back and forth (your last game: row 4 col 3 <-> 4 <-> 5 for 30 moves while the opponent walked home). Repeats are now judged on the real board minus a penalty.
+- **Opponent-route focus:** every step added to the opponent's route is now worth 1.25x a step of ours (`oppFocus`), together with the trap check from the last update.
+- **Win chance bar** at the top of the page (green/yellow/red), from the engine's search score.
+- Self-play (20 games, 0.2s) is roughly even with the previous build, so treat this as untested against your real opponent.

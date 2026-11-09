@@ -46,6 +46,7 @@ const MATE_BOUND = MATE - 1_000;
 const INF = MATE + 1;
 const MAX_PLY = 64;
 const TT_LIMIT = 1_500_000;
+const REPEAT_PENALTY = 150;
 
 export interface EvalWeights {
   /** Score per step of shortest-path advantage. */
@@ -60,6 +61,8 @@ export interface EvalWeights {
    * double-traps coming instead of trusting a raw shortest-path lead.
    */
   threat: number;
+  /** Multiplier on each step we add to the opponent's route (1 = same as our own steps). */
+  oppFocus: number;
 }
 
 /**
@@ -73,6 +76,7 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   walls: [0, 120, 240, 350, 450, 540, 620, 690, 750, 800, 840],
   race: 3_000,
   threat: 0.3,
+  oppFocus: 1.25,
 };
 /** The side to move is effectively half a step ahead in the race. */
 export const TEMPO = 50;
@@ -104,6 +108,14 @@ export function mateIn(score: number): number | null {
   return null;
 }
 
+/** Rough chance (0..100) that the side to move wins, from a search score. */
+export function winChance(score: number): number {
+  const mate = mateIn(score);
+  if (mate !== null) return mate > 0 ? 99 : 1;
+  const p = 1 / (1 + Math.exp(-(score - TEMPO) / 300));
+  return Math.min(99, Math.max(1, Math.round(p * 100)));
+}
+
 /** Static evaluation from the side to move's perspective. */
 export function evaluate(
   dMe: number,
@@ -121,7 +133,7 @@ export function evaluate(
   // has several independent ways forward.
   const routeValue = (n: number) => Math.min(8, Math.max(1, n)) * 12;
   let score =
-    (dOpp - dMe) * w.step +
+    (dOpp * w.oppFocus - dMe) * w.step +
     w.walls[wallsMe] -
     w.walls[wallsOpp] +
     routeValue(pathsMe) -
@@ -414,12 +426,21 @@ class Searcher {
     const key = hashKey(this.h1, this.h2);
     // Barricade permits reversible pawn shuffles. Treat a repeated position on
     // the current line as a draw instead of allowing the search to reward loops.
-    for (let i = 0; i < ply; i++) if (this.pathKeys[i] === key) return 0;
+    let repeated = false;
+    for (let i = 0; i < ply; i++) if (this.pathKeys[i] === key) repeated = true;
     this.pathKeys[ply] = key;
 
     const [gMe, gOpp] = this.dist[ply];
     distanceMap(s, me, gMe);
     distanceMap(s, opp, gOpp);
+    if (repeated) {
+      // A repeat is NOT a free draw: scoring it 0 made a losing engine shuffle
+      // back and forth instead of walking its route. Judge it on the board
+      // as it stands, minus a small penalty so progress is always preferred.
+      return (
+        evaluate(gMe[s.pawns[me]], gOpp[s.pawns[opp]], s.walls[me], s.walls[opp], this.weights) - REPEAT_PENALTY
+      );
+    }
     if (depth <= 0 || ply >= MAX_PLY - 1) {
       const dMe = gMe[s.pawns[me]];
       const dOpp = gOpp[s.pawns[opp]];
