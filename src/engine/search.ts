@@ -47,6 +47,7 @@ const INF = MATE + 1;
 const MAX_PLY = 64;
 const TT_LIMIT = 1_500_000;
 const REPEAT_PENALTY = 150;
+const LMR_FROM = 5;
 
 export interface EvalWeights {
   /** Score per step of shortest-path advantage. */
@@ -368,12 +369,13 @@ class Searcher {
     for (let i = 0; i < count; i++) {
       const m = moves[i];
       setWall(s, m, 1);
-      if (hasPath(s, 0) && hasPath(s, 1)) {
-        distanceMap(s, victim, this.scratch);
-        const d = this.scratch[s.pawns[victim]] - base;
-        if (d > best) best = d;
-      }
+      distanceMap(s, victim, this.scratch);
+      const v = this.scratch[s.pawns[victim]];
+      // v < 0 means the victim is sealed in (illegal). Only the other player's
+      // path needs a separate check, and only when this wall beats the best so far.
+      if (v >= 0 && v - base > best && hasPath(s, attacker)) best = v - base;
       setWall(s, m, 0);
+      if (best >= 8) break;
     }
     return Math.min(best, 8);
   }
@@ -474,6 +476,7 @@ class Searcher {
     const count = this.generate(ply, gMe, gOpp, ttMove);
     let best = -INF;
     let bestMove = -1;
+    let searched = 0;
     for (let i = 0; i < count; i++) {
       const m = this.pick(ply, i, count);
       const undo = this.make(m);
@@ -481,7 +484,19 @@ class Searcher {
         this.unmake(m, undo);
         continue;
       }
-      const score = -this.negamax(depth - 1, -beta, -alpha, ply + 1);
+      // Principal-variation search with late-move reductions: the first move gets a
+      // full window; the rest are probed with a null window (and, for late walls,
+      // one ply shallower) and only re-searched if they surprise us.
+      let score: number;
+      if (searched === 0) {
+        score = -this.negamax(depth - 1, -beta, -alpha, ply + 1);
+      } else {
+        const reduce = depth >= 3 && searched >= LMR_FROM && isWall(m) ? 1 : 0;
+        score = -this.negamax(depth - 1 - reduce, -alpha - 1, -alpha, ply + 1);
+        if (score > alpha && reduce > 0) score = -this.negamax(depth - 1, -alpha - 1, -alpha, ply + 1);
+        if (score > alpha && score < beta) score = -this.negamax(depth - 1, -beta, -alpha, ply + 1);
+      }
+      searched++;
       this.unmake(m, undo);
       if (score > best) {
         best = score;

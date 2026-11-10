@@ -27,3 +27,9 @@ Tune with: `npm run match -- default old 40 300`.
 - **Opponent-route focus:** every step added to the opponent's route is now worth 1.25x a step of ours (`oppFocus`), together with the trap check from the last update.
 - **Win chance bar** at the top of the page (green/yellow/red), from the engine's search score.
 - Self-play (20 games, 0.2s) is roughly even with the previous build, so treat this as untested against your real opponent.
+
+## Update 3
+- **Faster search:** principal-variation search + late-move reductions + a cheaper trap check. Same depth now takes 1.2x-2.8x less time (e.g. depth 5: 2.3 s vs 6.6 s in a busy middle-game).
+- **Auto think time (new default):** 1.2 s in the first moves, 2.5-3.5 s normally, 5 s when someone is close to goal. Sized for a 5-minute game. Fixed 2/4/8/15 s still available.
+- **Games are no longer lost:** the game is saved after every move (shown as "Unfinished / left" until it ends), so refresh/close/timeouts keep the record.
+- Self-play against the previous build is about even (40-45%, 24 games each, noise is large), so the speed gain is real but extra strength is not proven.

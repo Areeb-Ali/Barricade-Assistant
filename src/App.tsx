@@ -45,7 +45,8 @@ const AUTO_KEY = 'barricade-assistant/auto-play';
 const COLOR_KEY = 'barricade-assistant/color';
 const HISTORY_KEY = 'barricade-assistant/history';
 const BOOK_KEY = 'barricade-assistant/book';
-const THINK_OPTIONS = [2000, 4000, 8000, 15000];
+/** 0 = Auto: sized for a 5-minute game (quick in the opening, deeper when it gets tense). */
+const THINK_OPTIONS = [0, 2000, 4000, 8000, 15000];
 const NAMES = ['You', 'Opponent'] as const;
 
 function load<T>(key: string, fallback: T): T {
@@ -88,8 +89,8 @@ export default function App() {
   const [history, setHistory] = useState<GameRecord[]>(() => load(HISTORY_KEY, []));
   const [book, setBook] = useState<Book>(() => load(BOOK_KEY, {}));
   const [thinkMs, setThinkMs] = useState(() => {
-    const saved = load<number>(THINK_KEY, 8000);
-    return saved === 2000 ? 8000 : saved;
+    const saved = load<number>(THINK_KEY, 0);
+    return saved === 8000 || saved === 2000 ? 0 : saved;
   });
   const [autoPlay, setAutoPlay] = useState(() => load(AUTO_KEY, true));
   const [mode, setMode] = useState<InputMode>('move');
@@ -106,7 +107,17 @@ export default function App() {
   const yourTurn = state !== null && won === null && state.turn === 0;
   // A lesson from a studied loss takes priority over a fresh search.
   const lesson = useMemo(() => (yourTurn && state ? lookupLesson(book, state) : null), [yourTurn, state, book]);
-  const engine = useEngine(yourTurn && !lesson ? state : null, thinkMs);
+  const autoMs = (() => {
+    if (!state) return 3000;
+    const ply = game?.moves.length ?? 0;
+    if (ply < 6) return 1200;
+    const dm = distanceMap(state, 0, new Int16Array(CELLS))[state.pawns[0]];
+    const dopp = distanceMap(state, 1, new Int16Array(CELLS))[state.pawns[1]];
+    // Tense positions (someone close to goal or walls still in play both ways) get more time.
+    if (Math.min(dm, dopp) <= 4) return 5000;
+    return state.walls[0] + state.walls[1] > 6 ? 3500 : 2500;
+  })();
+  const engine = useEngine(yourTurn && !lesson ? state : null, thinkMs === 0 ? autoMs : thinkMs);
 
   // Win chance shown at the top. It comes from the latest search for you and is
   // kept while the opponent is thinking; it resets when a new game starts.
@@ -143,6 +154,15 @@ export default function App() {
     if (!game?.id || won === null) return;
     setHistory((h) => upsertRecord(h, toRecord(game, won === 0 ? 'win' : 'loss')));
   }, [game, won]);
+
+  // Save the game after every move, so a refresh, a closed tab or a lost-on-time
+  // game is never missing from the history. It is overwritten when the game ends.
+  const movesCount = game?.moves.length ?? 0;
+  useEffect(() => {
+    if (!game?.id || won !== null || movesCount < 2) return;
+    setHistory((h) => upsertRecord(h, toRecord(game, 'resigned')));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [movesCount, game?.id, won]);
 
   const study = useStudy(history, (gameId: string, findings: Finding[]) => {
     setBook((b) => {
@@ -420,11 +440,11 @@ export default function App() {
                   className={thinkMs === ms ? 'on' : ''}
                   onClick={() => setThinkMs(ms)}
                 >
-                  {ms / 1000}s
+                  {ms === 0 ? 'Auto' : `${ms / 1000}s`}
                 </button>
               ))}
             </div>
-            <p className="muted small">Longer is stronger. Use 8–15s for difficult wall-trap positions.</p>
+            <p className="muted small">Auto is tuned for a 5-minute game (1–5s per move). Pick a fixed time for deeper analysis.</p>
           </section>
 
           <MoveList game={current} />

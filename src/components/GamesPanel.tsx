@@ -10,7 +10,7 @@ interface GamesPanelProps {
   onImport: (next: { history: GameRecord[]; book: Book }) => void;
 }
 
-const RESULT_LABEL = { win: 'Win', loss: 'Loss', resigned: 'Opponent left' } as const;
+const RESULT_LABEL = { win: 'Win', loss: 'Loss', resigned: 'Unfinished / left' } as const;
 const SHOWN = 8;
 
 function when(ts: number) {
