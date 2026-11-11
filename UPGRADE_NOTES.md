@@ -33,3 +33,10 @@ Tune with: `npm run match -- default old 40 300`.
 - **Auto think time (new default):** 1.2 s in the first moves, 2.5-3.5 s normally, 5 s when someone is close to goal. Sized for a 5-minute game. Fixed 2/4/8/15 s still available.
 - **Games are no longer lost:** the game is saved after every move (shown as "Unfinished / left" until it ends), so refresh/close/timeouts keep the record.
 - Self-play against the previous build is about even (40-45%, 24 games each, noise is large), so the speed gain is real but extra strength is not proven.
+
+## Update 4 (analysis of 19 games after v3)
+- v3 results: 10 wins, 9 losses, 2 unfinished (about 50%, was about 25% before).
+- 7 of 9 losses were games where the opponent moved first (one tempo ahead).
+- You followed the engine's move in about 90% of moves. The losses at ply 7-9 where you chose a different wall than the engine cost ~3 steps each.
+- Engine-played loss pattern: it spends all walls while far ahead (e.g. 7 vs 20 steps, 0 walls left) and the opponent's last 3-5 walls then stretch its route from 2 to 16 steps.
+- Tried: stronger "compounding" trap penalty for the opponent's saved walls. It lost clearly in self-play (about 4-14), so it is OFF (`threatScale: 0`). Left in the code as a tuning option.

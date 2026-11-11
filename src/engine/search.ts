@@ -64,6 +64,11 @@ export interface EvalWeights {
   threat: number;
   /** Multiplier on each step we add to the opponent's route (1 = same as our own steps). */
   oppFocus: number;
+  /**
+   * Extra trap pressure per additional wall the attacker still holds: several
+   * walls compound (one wall took a 2-step route to 16 in a real game).
+   */
+  threatScale: number;
 }
 
 /**
@@ -78,6 +83,7 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   race: 3_000,
   threat: 0.3,
   oppFocus: 1.25,
+  threatScale: 0,
 };
 /** The side to move is effectively half a step ahead in the race. */
 export const TEMPO = 50;
@@ -142,8 +148,8 @@ export function evaluate(
     TEMPO -
     // Opponent walls that could hurt us are charged; our own threats are credited
     // a bit less because the side to move gets to use them first.
-    Math.round(dmgOnMe * w.threat * w.step) +
-    Math.round(dmgOnOpp * w.threat * w.step * 0.5);
+    Math.round(dmgOnMe * w.threat * w.step * (1 + w.threatScale * (Math.min(wallsOpp, 5) - 1))) +
+    Math.round(dmgOnOpp * w.threat * w.step * 0.5 * (1 + w.threatScale * (Math.min(wallsMe, 5) - 1)));
   // Pure races: whoever cannot be blocked any more and is not behind wins.
   // We move first, so we win ties.
   if (wallsOpp === 0 && dMe <= dOpp) score += w.race;
@@ -375,9 +381,9 @@ class Searcher {
       // path needs a separate check, and only when this wall beats the best so far.
       if (v >= 0 && v - base > best && hasPath(s, attacker)) best = v - base;
       setWall(s, m, 0);
-      if (best >= 8) break;
+      if (best >= 10) break;
     }
-    return Math.min(best, 8);
+    return Math.min(best, 10);
   }
 
   private generate(ply: number, gMe: Int16Array, gOpp: Int16Array, ttMove: Move): number {
